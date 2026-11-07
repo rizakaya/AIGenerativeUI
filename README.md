@@ -2,6 +2,24 @@
 
 Kullanıcı ne görmek istediğini doğal dille yazar. LLM ekranı kod olarak değil, **veri (JSON)** olarak tarif eder. Angular bu tarifi gerçek bileşenlere çevirir. LLM yalnızca güvenilir katalogdaki 4 bileşeni kullanabilir: **Card, Table, Chart, Form**. JSON biçimi Google'ın **A2UI v0.9.1** mesajlarını izler.
 
+## Ekran görüntüleri
+
+### Satış listesi
+
+![Ürünlere göre aylık satışları ve hedefleri gösteren tablo](docs/screenshots/sales-table.png)
+
+### Kategori filtresi
+
+![Kategori seçimi ve Uygula düğmesi bulunan satış ekranı](docs/screenshots/category-filter.png)
+
+### Satış ve hedef karşılaştırması
+
+![Aylık satış ve hedef grafiği ile hedefin altında kalan ürünlerin tablosu](docs/screenshots/sales-comparison.png)
+
+### Resmi A2UI renderer
+
+![Resmi A2UI renderer ile oluşturulan filtre, grafik ve ürün tabloları](docs/screenshots/official-a2ui-renderer.png)
+
 ## Ne öğreniyoruz, kodda nerede?
 
 | Kavram | Dosya |
