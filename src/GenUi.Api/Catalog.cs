@@ -44,7 +44,9 @@ public static class Catalog
               ("compare ... and also show ...") usually needs one component per part.
 
             Rules:
-            - Components are a FLAT list. Containers point to children by id.
+            - Components are a FLAT list. Containers point to children by id: "children": ["c1", "c2"].
+              NEVER put a component object inside "children". Every component is a top-level item of "components".
+            - Form "options" are plain strings: ["Elektronik", "Mobilya"].
             - Exactly one component has id "root" and it must be a Card.
             - Never put data values in components. Bind to a dataset with { "path": ... }.
             - Only use these datasets and fields (sales of the last 3 months, TL):
@@ -80,26 +82,33 @@ public static class Catalog
         foreach (var node in components)
         {
             if (node is not JsonObject c) { errors.Add("Every component must be a JSON object."); continue; }
-            var id = (string?)c["id"];
-            var type = (string?)c["component"];
+            var id = Str(c["id"]);
+            var type = Str(c["component"]);
             if (string.IsNullOrWhiteSpace(id)) { errors.Add("A component has no id."); continue; }
             if (!byId.TryAdd(id, c)) errors.Add($"Duplicate id '{id}'.");
             if (!Components.Contains(type)) errors.Add($"'{id}': component '{type}' is not in the catalog (allowed: {string.Join(", ", Components)}).");
         }
 
         if (!byId.TryGetValue("root", out var root)) errors.Add("There is no component with id 'root'.");
-        else if ((string?)root["component"] != "Card") errors.Add("'root' must be a Card.");
-        else if ((root["children"]?.AsArray().Count ?? 0) == 0)
+        else if (Str(root["component"]) != "Card") errors.Add("'root' must be a Card.");
+        else if (((root["children"] as JsonArray)?.Count ?? 0) == 0)
             errors.Add($"'root' has no children, so nothing would be shown. Set \"children\": [{string.Join(", ", byId.Keys.Where(k => k != "root").Select(k => $"\"{k}\""))}].");
 
         foreach (var (id, c) in byId)
         {
-            switch ((string?)c["component"])
+            switch (Str(c["component"]))
             {
                 case "Card":
-                    foreach (var child in c["children"]?.AsArray() ?? [])
+                    foreach (var child in c["children"] as JsonArray ?? [])
                     {
-                        var childId = (string?)child ?? "";
+                        // Küçük modeller sık sık ağaç yazar. A2UI'de liste DÜZdür: children sadece id içerir.
+                        if (child is JsonObject nested)
+                        {
+                            errors.Add($"'{id}': children must contain only id strings, not objects. " +
+                                       $"Move component '{Str(nested["id"])}' to the top-level \"components\" list (flat list) and write \"{Str(nested["id"])}\" in children.");
+                            continue;
+                        }
+                        var childId = Str(child) ?? "";
                         if (!byId.ContainsKey(childId)) errors.Add($"'{id}': child '{childId}' does not exist.");
                         if (childId == id || childId == "root") errors.Add($"'{id}': a Card cannot contain '{childId}'.");
                     }
@@ -107,24 +116,28 @@ public static class Catalog
 
                 case "Table":
                     var tableFields = CheckDataset(id, c["rows"], errors);
-                    var columns = c["columns"]?.AsArray() ?? [];
+                    var columns = c["columns"] as JsonArray ?? [];
                     if (columns.Count == 0) errors.Add($"'{id}': Table needs columns.");
                     foreach (var col in columns)
-                        CheckField(id, (string?)col?["field"], tableFields, months, errors);
+                        CheckField(id, Str(col?["field"]), tableFields, months, errors);
                     break;
 
                 case "Chart":
                     var chartFields = CheckDataset(id, c["data"], errors);
-                    CheckField(id, (string?)c["labelField"], chartFields, months, errors);
-                    var values = c["valueFields"]?.AsArray() ?? [];
+                    CheckField(id, Str(c["labelField"]), chartFields, months, errors);
+                    var values = c["valueFields"] as JsonArray ?? [];
                     if (values.Count == 0) errors.Add($"'{id}': Chart needs valueFields.");
-                    foreach (var v in values) CheckField(id, (string?)v, chartFields, months, errors);
+                    foreach (var v in values) CheckField(id, Str(v), chartFields, months, errors);
                     break;
 
                 case "Form":
-                    foreach (var f in c["fields"]?.AsArray() ?? [])
-                        if (!FormFields.Contains((string?)f?["name"])) errors.Add($"'{id}': form field '{f?["name"]}' is not allowed (only: category).");
-                    if ((string?)c["action"]?["event"]?["name"] != FilterAction) errors.Add($"'{id}': Form action must be {{ \"event\": {{ \"name\": \"{FilterAction}\" }} }}.");
+                    foreach (var f in c["fields"] as JsonArray ?? [])
+                    {
+                        if (!FormFields.Contains(Str(f?["name"]))) errors.Add($"'{id}': form field '{f?["name"]}' is not allowed (only: category).");
+                        if ((f?["options"] as JsonArray ?? []).Any(o => Str(o) is null))
+                            errors.Add($"'{id}': options must be plain strings, e.g. [\"Elektronik\", \"Mobilya\"].");
+                    }
+                    if (Str((c["action"] as JsonObject)?["event"]?["name"]) != FilterAction) errors.Add($"'{id}': Form action must be {{ \"event\": {{ \"name\": \"{FilterAction}\" }} }}.");
                     break;
             }
         }
@@ -133,7 +146,7 @@ public static class Catalog
 
     private static string[]? CheckDataset(string id, JsonNode? binding, List<string> errors)
     {
-        var path = (string?)binding?["path"];
+        var path = Str(binding?["path"]);
         if (path is not null && SalesData.Datasets.TryGetValue(path, out var fields)) return fields;
         errors.Add($"'{id}': data path '{path}' is unknown (allowed: {string.Join(", ", SalesData.Datasets.Keys)}).");
         return null;
@@ -149,4 +162,9 @@ public static class Catalog
         if (m >= 0 && !months.Contains(SalesData.Months[m]))
             errors.Add($"'{id}': field '{field}' is {SalesData.Months[m]}, which is not in \"months\". Remove it or add the month.");
     }
+
+    // JSON düğümünü güvenle string'e çevirir (değer string değilse null). Böylece model
+    // beklenmedik bir tip yazdığında program patlamaz, anlaşılır bir hata mesajı üretilir.
+    private static string? Str(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 }

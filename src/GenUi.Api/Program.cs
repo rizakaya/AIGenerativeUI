@@ -5,7 +5,8 @@ using GenUi.Api;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins("http://localhost:4200").AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins("http://localhost:4200", "http://localhost:4300") // 4200: kendi renderer, 4300: resmi renderer
+    .AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.AddHttpClient<OllamaClient>(c =>
 {
@@ -62,13 +63,24 @@ app.MapPost("/api/ui", async (UiRequest req, OllamaClient llm, ILogger<Program> 
     if (errors.Count > 0)
         return Results.UnprocessableEntity(new { errors, llmOutputs = rawOutputs });
 
+    // Form'un action'ına A2UI'nin resmi "context" bağlamasını biz ekliyoruz: renderer butona
+    // basıldığında { "path": "/form/category" } değerini çözüp action mesajına koyar.
+    // (Modele bırakmıyoruz; bu kısım her zaman aynı, uydurmasına gerek yok.)
+    var finalComponents = components!.DeepClone().AsArray();
+    foreach (var form in finalComponents.OfType<JsonObject>().Where(c => (string?)c["component"] == "Form"))
+        form["action"] = new JsonObject { ["event"] = new JsonObject
+        {
+            ["name"] = Catalog.FilterAction,
+            ["context"] = new JsonObject { ["category"] = new JsonObject { ["path"] = "/form/category" } },
+        } };
+
     // 3) A2UI mesajlarını oluştur. Bileşenler LLM'den, veri API'den gelir.
     var a2ui = new JsonArray
     {
         new JsonObject { ["version"] = "v0.9.1", ["createSurface"] = new JsonObject
             { ["surfaceId"] = surfaceId, ["catalogId"] = Catalog.Id } },
         new JsonObject { ["version"] = "v0.9.1", ["updateComponents"] = new JsonObject
-            { ["surfaceId"] = surfaceId, ["components"] = components!.DeepClone() } },
+            { ["surfaceId"] = surfaceId, ["components"] = finalComponents } },
         new JsonObject { ["version"] = "v0.9.1", ["updateDataModel"] = new JsonObject
             { ["surfaceId"] = surfaceId, ["path"] = "/", ["value"] = SalesData.Build(category, months) } },
     };

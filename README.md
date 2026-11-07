@@ -28,17 +28,27 @@ Kullanıcı metni ──► POST /api/ui ──► Ollama (katalog + veri setler
       Form "Uygula" ──► A2UI action { name, surfaceId, sourceComponentId, timestamp, context } ──► POST /api/ui
 ```
 
+## İki frontend, aynı API
+
+| Uygulama | Port | Ekranı kim çiziyor? |
+|---|---|---|
+| `src/genui-web` | 4200 | Bizim elle yazdığımız renderer (`surface-store.ts`, `a2ui-node.ts`): mekanizmayı görmek için |
+| `src/genui-web-official` | 4300 | Google'ın resmi `@a2ui/angular` renderer'ı: formatı doğru uyguladığımızı test etmek için |
+
+Resmi renderer'da A2UI işlerini (mesajları işleme, `root`'tan çizme, `{"path": ...}` bağlamalarını çözme, action mesajını üretme) kütüphane yapıyor. Bizim yazdığımız şey sadece özel kataloğumuz: `src/genui-web-official/src/app/catalog/` altındaki Card, Table, Chart, Form ve `genui-catalog.ts`. Bileşen şemaları A2UI'nin resmi tipleriyle (`ChildListSchema`, `DynamicValueSchema`, `ActionSchema`) zod ile tanımlı.
+
 ## Çalıştırma
 
-1. Ollama'da model hazır olsun: `ollama pull qwen2.5:3b` (model `GenUi.Api/appsettings.json` içinde değiştirilebilir)
+1. Ollama'da model hazır olsun: `ollama pull qwen2.5:7b` (model `GenUi.Api/appsettings.json` içinde değiştirilebilir)
 2. API: `cd src/GenUi.Api` ve `dotnet run` (http://localhost:5080)
 3. Web: `cd src/genui-web`, `npm install`, ardından `npm start` (http://localhost:4200)
+4. Resmi renderer ile: `cd src/genui-web-official`, `npm install`, ardından `npm start` (http://localhost:4300)
 
 `GenUi.Api.http` dosyasıyla API'yi tarayıcı olmadan da deneyebilirsin.
 
 ## Bilinçli sadeleştirmeler
 
 - Table ve Chart, A2UI'nin hazır Basic Catalog'unda yok. Bu yüzden kendi kataloğumuzu tanımladık (A2UI buna izin veriyor).
-- Hazır CopilotKit/A2UI Angular renderer'ı kullanmadık ki mekanizma görünsün.
+- `genui-web` hazır renderer kullanmıyor ki mekanizma görünsün; `genui-web-official` aynı mesajları resmi `@a2ui/angular` (0.14.0) ile çiziyor.
 - Streaming yok: tüm mesajlar tek bir HTTP cevabında geliyor. Gerçek A2UI'de bunlar bir akış (stream) olarak gelir.
 - Form yalnızca `category` alanını destekliyor, çünkü sunucunun anladığı filtre sadece bu.
